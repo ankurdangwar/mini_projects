@@ -1,0 +1,27 @@
+{
+  "name": "backeri-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "db:generate": "npm --workspace=@backeri/api run db:generate",
+    "db:migrate": "npm --workspace=@backeri/api run db:migrate",
+    "db:push": "npm --workspace=@backeri/api run db:push",
+    "db:seed": "npm --workspace=@backeri/api run db:seed",
+    "dev:api": "npm --workspace=@backeri/api run dev",
+    "dev:web": "npm --workspace=@backeri/web run dev",
+    "dev": "concurrently -n api,web -c cyan,yellow \"npm run dev:api\" \"npm run dev:web\"",
+    "build": "npm --workspace=@backeri/shared run build && npm --workspace=@backeri/api run build && npm --workspace=@backeri/web run build",
+    "test": "npm --workspace=@backeri/api run test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2"
+  }
+}

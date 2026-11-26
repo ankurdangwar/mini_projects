@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  BAKER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  BAKING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum FulfillmentType {
+  PICKUP
+  DELIVERY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  phone        String?
+  name         String
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(CUSTOMER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@map("users")
+}
+
+// Multi-branch scaling path: add `storeId String? @map("store_id")` on Product, TimeSlot, and Order.
+model Product {
+  id             String   @id @default(uuid()) @db.Uuid
+  slug           String   @unique
+  name           String
+  description    String
+  category       String
+  basePriceCents Int      @map("base_price_cents")
+  leadTimeHours  Int      @default(2) @map("lead_time_hours")
+  isActive       Boolean  @default(true) @map("is_active")
+  imageUrl       String   @map("image_url")
+  tags           String[] @default([])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  variants ProductVariant[]
+
+  @@index([category, isActive])
+  @@map("products")
+}
+
+model ProductVariant {
+  id              String   @id @default(uuid()) @db.Uuid
+  productId       String   @map("product_id") @db.Uuid
+  label           String
+  priceDeltaCents Int      @default(0) @map("price_delta_cents")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@unique([productId, label])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model TimeSlot {
+  id           String   @id @default(uuid()) @db.Uuid
+  date         DateTime @db.Date
+  startTime    String   @map("start_time") // "HH:MM" 24-hour format
+  endTime      String   @map("end_time")   // "HH:MM" 24-hour format
+  maxOrders    Int      @map("max_orders")
+  bookedOrders Int      @default(0) @map("booked_orders")
+  isClosed     Boolean  @default(false) @map("is_closed")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@unique([date, startTime, endTime])
+  @@index([date, isClosed])
+  @@map("time_slots")
+}
+
+model Order {
+  id               String          @id @default(uuid()) @db.Uuid
+  orderNumber      String          @unique @map("order_number")
+  userId           String          @map("user_id") @db.Uuid
+  slotId           String          @map("slot_id") @db.Uuid
+  status           OrderStatus     @default(PENDING)
+  totalAmountCents Int             @map("total_amount_cents")
+  fulfillmentType  FulfillmentType @map("fulfillment_type")
+  deliveryAddress  Json?           @map("delivery_address")
+  idempotencyKey   String          @unique @map("idempotency_key")
+  holdId           String?         @map("hold_id")
+  cancelReason     String?         @map("cancel_reason")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  user          User              @relation(fields: [userId], references: [id])
+  slot          TimeSlot          @relation(fields: [slotId], references: [id])
+  items         OrderItem[]
+  payments      Payment[]
+  notifications NotificationLog[]
+
+  @@index([status, createdAt])
+  @@index([slotId])
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String @id @default(uuid()) @db.Uuid
+  orderId        String @map("order_id") @db.Uuid
+  variantId      String @map("variant_id") @db.Uuid
+  quantity       Int
+  unitPriceCents Int    @map("unit_price_cents")
+  customNotes    Json?  @map("custom_notes")
+
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
+  @@index([variantId])
+  @@map("order_items")
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  orderId        String        @map("order_id") @db.Uuid
+  provider       String        @default("sandbox")
+  providerRef    String        @unique @map("provider_ref")
+  amountCents    Int           @map("amount_cents")
+  status         PaymentStatus @default(PENDING)
+  idempotencyKey String        @unique @map("idempotency_key")
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model NotificationLog {
+  id        String              @id @default(uuid()) @db.Uuid
+  orderId   String?             @map("order_id") @db.Uuid
+  channel   NotificationChannel
+  recipient String
+  subject   String?
+  body      String
+  status    String              @default("SENT")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("notification_logs")
+}

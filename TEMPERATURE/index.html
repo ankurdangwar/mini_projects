@@ -13,6 +13,80 @@
             <input type="text" placeholder="Enter City Name" spellcheck="false">
             <button> <img src ="images/search.png" alt="Search"></button>
         </div>
+        <div class="error">
+            <p> invalid city name </p>
+        </div>
+        <div class="weather">
+            <img src="images/rain.png" class="Weather-icon">
+            <h1 class="temp">22°C </h1>
+        <h2 class="city">New York</h2>
+        <div class="details">
+            <div class="col">
+                <img src="images/humidity.png" alt="Humidity">
+               <p class="humidity">50%</p>
+               <p>Humidity </p>
+            </div>
+            <div class="col">
+                <img src="images/wind.png" alt="Humidity">
+               <p class="wind">20kmph</p>
+               <p>Wind </p>
+            </div>
+        </div>
+        
+        </div>
     </div>
+    <script src="config.js"></script>
+    <script>
+        const apiKey = window.OPENWEATHER_API_KEY;
+        const apiurl="https://api.openweathermap.org/data/2.5/weather?units=metric&q=";
+        const searchBox=document.querySelector(".search input");
+        const searchBtn=document.querySelector(".search button");
+        const weatherIcon=document.querySelector(".Weather-icon");
+        async function checkWeather(city){
+            const errorElement = document.querySelector(".error");
+            const weatherElement = document.querySelector(".weather");
+            if (!city.trim()) {
+                errorElement.querySelector("p").textContent = "Enter a city name.";
+                errorElement.style.display = "block";
+                weatherElement.style.display = "none";
+                return;
+            }
+
+            try {
+                const response = await fetch(apiurl + encodeURIComponent(city.trim()) + `&appid=${apiKey}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || "Could not get weather for that city.");
+                }
+
+                document.querySelector(".city").textContent = data.name;
+                document.querySelector(".temp").textContent = `${Math.round(data.main.temp)}°C`;
+                document.querySelector(".humidity").textContent = `${data.main.humidity}%`;
+                document.querySelector(".wind").textContent = `${(data.wind.speed * 3.6).toFixed(1)} km/h`;
+
+                const icons = {
+                    Clouds: "clouds", Clear: "clear", Rain: "rain",
+                    Drizzle: "drizzle", Mist: "mist", Snow: "snow", Haze: "mist", Fog: "mist"
+                };
+                weatherIcon.src = `images/${icons[data.weather[0].main] || "clouds"}.png`;
+                errorElement.style.display = "none";
+                weatherElement.style.display = "block";
+            } catch (error) {
+                errorElement.querySelector("p").textContent = error.message === "Failed to fetch"
+                    ? "Could not connect to the weather service. Check your connection and API key."
+                    : error.message;
+                errorElement.style.display = "block";
+                weatherElement.style.display = "none";
+            }
+        }
+
+        searchBtn.addEventListener("click",()=>{
+            checkWeather(searchBox.value);
+        });
+        searchBox.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") checkWeather(searchBox.value);
+        });
+        
+    </script>
 </body>
 </html>
