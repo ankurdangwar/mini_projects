@@ -2,15 +2,26 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import type { UserRole } from '@backeri/shared';
 import { env } from '../config/env';
+import { prisma } from '../config/prisma';
+import { redis } from '../config/redis';
 import { AppError } from './errorHandler';
 
 export const AUTH_COOKIE_NAME = 'backeri_token';
+export const AUTH_USER_CACHE_TTL_SECONDS = 60;
 
 export interface AuthPayload {
   userId: string;
   email: string;
   role: UserRole;
   name: string;
+}
+
+interface CachedAuthUser {
+  id: string;
+  email: string;
+  role: UserRole;
+  name: string;
+  isActive: boolean;
 }
 
 declare global {
@@ -21,8 +32,66 @@ declare global {
   }
 }
 
+export function authUserCacheKey(userId: string): string {
+  return `auth:user:${userId}`;
+}
+
+export async function invalidateAuthUserCache(userId: string): Promise<void> {
+  try {
+    await redis.del(authUserCacheKey(userId));
+  } catch {
+    // Non-fatal if Redis is temporarily unavailable
+  }
+}
+
+async function resolveActiveUser(userId: string): Promise<CachedAuthUser | null> {
+  const key = authUserCacheKey(userId);
+
+  try {
+    const cached = await redis.get(key);
+    if (cached) {
+      return JSON.parse(cached) as CachedAuthUser;
+    }
+  } catch {
+    // Fall back to PostgreSQL on Redis read error
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, role: true, name: true, isActive: true },
+  });
+
+  if (!dbUser) {
+    return null;
+  }
+
+  const snapshot: CachedAuthUser = {
+    id: dbUser.id,
+    email: dbUser.email,
+    role: dbUser.role,
+    name: dbUser.name,
+    isActive: dbUser.isActive,
+  };
+
+  try {
+    await redis.set(
+      key,
+      JSON.stringify(snapshot),
+      'EX',
+      AUTH_USER_CACHE_TTL_SECONDS
+    );
+  } catch {
+    // Non-fatal if Redis write fails
+  }
+
+  return snapshot;
+}
+
 export function signAuthToken(payload: AuthPayload): string {
-  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, env.JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: '7d',
+  });
 }
 
 export function setAuthCookie(res: Response, token: string): void {
@@ -59,13 +128,38 @@ export function authenticate(
     return next(new AppError(401, 'Authentication required', 'UNAUTHORIZED'));
   }
 
+  let decoded: AuthPayload;
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, env.JWT_SECRET, {
+      algorithms: ['HS256'],
+    }) as AuthPayload;
   } catch {
-    next(new AppError(401, 'Invalid or expired session token', 'UNAUTHORIZED'));
+    return next(
+      new AppError(401, 'Invalid or expired session token', 'UNAUTHORIZED')
+    );
   }
+
+  // Resolve active status & latest role via 60s Redis cache (evicted on staff disable/role change)
+  resolveActiveUser(decoded.userId)
+    .then((user) => {
+      if (!user || !user.isActive) {
+        return next(
+          new AppError(
+            401,
+            'Account is disabled or no longer exists',
+            'ACCOUNT_DISABLED'
+          )
+        );
+      }
+      req.user = {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      };
+      next();
+    })
+    .catch(next);
 }
 
 export function optionalAuth(
@@ -74,12 +168,15 @@ export function optionalAuth(
   next: NextFunction
 ): void {
   const token = extractToken(req);
-  if (token) {
-    try {
-      req.user = jwt.verify(token, env.JWT_SECRET) as AuthPayload;
-    } catch {
-      // Ignore invalid optional token
-    }
+  if (!token) return next();
+
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET, {
+      algorithms: ['HS256'],
+    }) as AuthPayload;
+    req.user = decoded;
+  } catch {
+    // Ignore invalid optional token
   }
   next();
 }

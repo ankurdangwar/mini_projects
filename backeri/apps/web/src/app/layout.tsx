@@ -5,9 +5,9 @@ import { CartProvider } from '@/components/CartProvider';
 import { Navbar } from '@/components/Navbar';
 
 export const metadata: Metadata = {
-  title: 'Backeri — Artisan Bakery Ordering & Kitchen Operations',
+  title: 'Backeri — Neighborhood Bakery & Express Cake Delivery',
   description:
-    'Small-batch sourdough, French viennoiserie, and bespoke celebration cakes with real-time kitchen slot scheduling.',
+    'Order same-day custom eggless cakes, warm croissants, sourdough, and cafe combos in under 45 seconds.',
 };
 
 export default function RootLayout({
@@ -17,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-cream text-espresso">
+      <body className="min-h-screen bg-surface font-sans text-ink">
         <AuthProvider>
           <CartProvider>
             <Navbar />

@@ -43,7 +43,7 @@ router.post(
 
     const { mode } = simulateSchema.parse(req.body ?? {});
     const outcome = await paymentService.simulateSandboxPayment(
-      req.params.providerRef,
+      String(req.params.providerRef),
       mode
     );
     res.status(200).json(outcome);

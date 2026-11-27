@@ -1,25 +1,31 @@
 import { env } from './config/env';
 import { prisma } from './config/prisma';
 import { closeRedis } from './config/redis';
-import { createApp } from './app';
 import { realtimeService } from './modules/realtime/realtime.service';
 import { uploadService } from './modules/uploads/upload.service';
+import { jobsService } from './modules/jobs/job.queues';
+import { createApp } from './app';
 
-async function start() {
+async function bootstrap() {
   await uploadService.ensureDir();
   await realtimeService.init();
+  await jobsService.startWorkers({ runInitialChecks: true });
 
   const app = createApp();
   const server = app.listen(env.API_PORT, () => {
-    console.log(`[Backeri API] Listening on http://localhost:${env.API_PORT}`);
-    console.log(`[Backeri API] Payment provider: ${env.PAYMENT_PROVIDER}`);
+    console.log(
+      `Backeri API listening on http://localhost:${env.API_PORT} (${env.NODE_ENV})`
+    );
   });
 
   const shutdown = async (signal: string) => {
-    console.log(`\n[Backeri API] Received ${signal}, shutting down gracefully...`);
+    console.log(`Received ${signal}, shutting down gracefully...`);
     server.close(async () => {
-      await closeRedis();
-      await prisma.$disconnect();
+      await Promise.allSettled([
+        jobsService.closeJobs(),
+        prisma.$disconnect(),
+        closeRedis(),
+      ]);
       process.exit(0);
     });
   };
@@ -28,7 +34,7 @@ async function start() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-start().catch((err) => {
-  console.error('[Backeri API] Fatal startup error:', err);
+bootstrap().catch((err) => {
+  console.error('Failed to start Backeri API:', err);
   process.exit(1);
 });

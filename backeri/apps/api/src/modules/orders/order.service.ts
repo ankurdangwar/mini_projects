@@ -205,6 +205,8 @@ export const orderService = {
     status?: OrderStatus;
     date?: string;
     slotId?: string;
+    q?: string;
+    fulfillmentType?: FulfillmentType;
     page?: number;
     limit?: number;
   }) {
@@ -223,11 +225,24 @@ export const orderService = {
       where.slotId = params.slotId;
     }
 
+    if (params.fulfillmentType) {
+      where.fulfillmentType = params.fulfillmentType;
+    }
+
     if (params.date) {
       const target = new Date(`${params.date}T00:00:00.000Z`);
       if (!Number.isNaN(target.getTime())) {
         where.slot = { date: target };
       }
+    }
+
+    const search = params.q?.trim();
+    if (search) {
+      where.OR = [
+        { orderNumber: { contains: search, mode: 'insensitive' } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+      ];
     }
 
     const [orders, total] = await Promise.all([
@@ -314,7 +329,13 @@ export const orderService = {
       return order;
     });
 
-    await realtimeService.publish('order.status_updated', updated);
+    await realtimeService.publish('order.status_updated', {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      previousStatus: current.status,
+      status: updated.status,
+      order: updated,
+    });
 
     if (nextStatus === OrderStatus.READY) {
       await notificationService.sendOrderReady(updated);

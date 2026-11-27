@@ -1,7 +1,11 @@
-export function formatMoney(cents: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatMoney(cents: number, currency = 'INR'): string {
+  const isWhole = cents % 100 === 0;
+  const locale = currency === 'INR' ? 'en-IN' : 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
+    minimumFractionDigits: currency === 'INR' && isWhole ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(cents / 100);
 }
 

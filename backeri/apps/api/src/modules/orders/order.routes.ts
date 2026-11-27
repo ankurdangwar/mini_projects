@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { OrderStatus } from '@prisma/client';
+import { FulfillmentType, OrderStatus } from '@prisma/client';
 import { createOrderSchema, updateOrderStatusSchema } from '@backeri/shared';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { asyncHandler } from '../../middleware/errorHandler';
@@ -38,7 +38,7 @@ router.get(
   '/orders/:id',
   authenticate,
   asyncHandler(async (req, res) => {
-    const order = await orderService.getOrderById(req.params.id, {
+    const order = await orderService.getOrderById(String(req.params.id), {
       userId: req.user!.userId,
       role: req.user!.role,
     });
@@ -58,6 +58,14 @@ router.get(
         : undefined;
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
     const slotId = typeof req.query.slotId === 'string' ? req.query.slotId : undefined;
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const fulfillmentType =
+      typeof req.query.fulfillmentType === 'string' &&
+      Object.values(FulfillmentType).includes(
+        req.query.fulfillmentType as FulfillmentType
+      )
+        ? (req.query.fulfillmentType as FulfillmentType)
+        : undefined;
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 50;
 
@@ -65,6 +73,8 @@ router.get(
       status,
       date,
       slotId,
+      q,
+      fulfillmentType,
       page,
       limit,
     });
@@ -79,7 +89,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const parsed = updateOrderStatusSchema.parse(req.body);
     const order = await orderService.transitionOrderStatus(
-      req.params.id,
+      String(req.params.id),
       parsed.status as OrderStatus,
       req.user!.role,
       parsed.reason

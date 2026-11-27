@@ -99,17 +99,20 @@ export function ProductDetailClient({ product }: { product: ProductDTO }) {
           }
         : undefined;
 
-    addItem({
-      productId: product.id,
-      productName: product.name,
-      productImage: product.imageUrl,
-      leadTimeHours: product.leadTimeHours,
-      variantId: selectedVariant.id,
-      variantLabel: selectedVariant.label,
-      unitPriceCents,
-      quantity,
-      customNotes,
-    });
+    addItem(
+      {
+        productId: product.id,
+        productName: product.name,
+        productImage: product.imageUrl,
+        leadTimeHours: product.leadTimeHours,
+        variantId: selectedVariant.id,
+        variantLabel: selectedVariant.label,
+        unitPriceCents,
+        quantity,
+        customNotes,
+      },
+      { openDrawer: true }
+    );
   };
 
   return (

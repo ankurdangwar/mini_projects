@@ -1,4 +1,10 @@
-import type { FulfillmentType, OrderStatus, PaymentStatus, UserRole } from '@backeri/shared';
+import type {
+  FulfillmentType,
+  OrderStatus,
+  PaymentStatus,
+  UserRole,
+  WasteReason,
+} from '@backeri/shared';
 
 export interface UserProfile {
   id: string;
@@ -6,6 +12,8 @@ export interface UserProfile {
   name: string;
   phone: string | null;
   role: UserRole;
+  isActive?: boolean;
+  emailVerified?: boolean;
   createdAt?: string;
 }
 
@@ -138,6 +146,32 @@ export interface PrepSheetResponse {
   }>;
 }
 
+export interface WasteLogDTO {
+  id: string;
+  date: string;
+  variantId: string;
+  quantity: number;
+  unitCostCents: number;
+  totalValueCents: number;
+  reason: WasteReason;
+  notes: string | null;
+  createdAt: string;
+  variant: {
+    id: string;
+    label: string;
+    product: {
+      id: string;
+      name: string;
+      category: string;
+    };
+  };
+  loggedBy: {
+    id: string;
+    name: string;
+    role: UserRole;
+  };
+}
+
 export interface AnalyticsResponse {
   periodDays: number;
   summary: {
@@ -146,6 +180,24 @@ export interface AnalyticsResponse {
     averageOrderValueCents: number;
     cancelledOrderCount: number;
     cancellationRatePct: number;
+  };
+  wasteSummary: {
+    totalSoldUnits: number;
+    totalWastedUnits: number;
+    estimatedWasteValueCents: number;
+    productionWasteRatePct: number;
+    byReason: Array<{
+      reason: WasteReason;
+      units: number;
+      valueCents: number;
+    }>;
+    topWastedProducts: Array<{
+      productId: string;
+      productName: string;
+      variantLabel: string;
+      units: number;
+      valueCents: number;
+    }>;
   };
   dailyRevenue: Array<{
     date: string;

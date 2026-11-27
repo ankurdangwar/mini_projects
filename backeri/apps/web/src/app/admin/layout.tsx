@@ -8,9 +8,13 @@ import {
   CalendarCog,
   ChefHat,
   ClipboardList,
+  Cpu,
   KanbanSquare,
   LogOut,
   Store,
+  Trash2,
+  Users,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 
@@ -64,9 +68,33 @@ export default function AdminLayout({
       roles: ['BAKER', 'ADMIN'],
     },
     {
+      href: '/admin/waste',
+      label: 'Waste Log',
+      icon: Trash2,
+      roles: ['BAKER', 'ADMIN'],
+    },
+    {
+      href: '/admin/menu',
+      label: 'Menu & Variants',
+      icon: UtensilsCrossed,
+      roles: ['ADMIN'],
+    },
+    {
+      href: '/admin/staff',
+      label: 'Staff Accounts',
+      icon: Users,
+      roles: ['ADMIN'],
+    },
+    {
       href: '/admin/analytics',
       label: 'Analytics & Logs',
       icon: BarChart3,
+      roles: ['ADMIN'],
+    },
+    {
+      href: '/admin/jobs',
+      label: 'Background Jobs',
+      icon: Cpu,
       roles: ['ADMIN'],
     },
   ].filter((item) => item.roles.includes(user.role));

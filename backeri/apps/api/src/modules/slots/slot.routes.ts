@@ -31,7 +31,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const existingHoldId =
       typeof req.body?.holdId === 'string' ? req.body.holdId : undefined;
-    const hold = await slotService.createSoftHold(req.params.id, existingHoldId);
+    const hold = await slotService.createSoftHold(String(req.params.id), existingHoldId);
     res.status(201).json({ hold });
   })
 );
@@ -39,7 +39,7 @@ router.post(
 router.delete(
   '/slots/:id/hold/:holdId',
   asyncHandler(async (req, res) => {
-    await slotService.releaseHold(req.params.id, req.params.holdId);
+    await slotService.releaseHold(String(req.params.id), String(req.params.holdId));
     res.status(200).json({ released: true });
   })
 );
@@ -65,7 +65,7 @@ router.patch(
   requireRole('BAKER', 'ADMIN'),
   asyncHandler(async (req, res) => {
     const parsed = updateSlotSchema.parse(req.body);
-    const slot = await slotService.updateSlot(req.params.id, parsed);
+    const slot = await slotService.updateSlot(String(req.params.id), parsed);
     res.status(200).json({ slot });
   })
 );

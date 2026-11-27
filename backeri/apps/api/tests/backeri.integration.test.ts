@@ -5,6 +5,7 @@ import { createApp } from '../src/app';
 import { prisma } from '../src/config/prisma';
 import { closeRedis, redis } from '../src/config/redis';
 import { paymentProvider } from '../src/modules/payments/payment.provider';
+import { jobsService } from '../src/modules/jobs/job.queues';
 
 const app = createApp();
 
@@ -28,7 +29,11 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
   });
 
   afterAll(async () => {
-    await Promise.allSettled([prisma.$disconnect(), closeRedis()]);
+    await Promise.allSettled([
+      jobsService.closeJobs(),
+      prisma.$disconnect(),
+      closeRedis(),
+    ]);
   });
 
   it('caches menu in Redis and invalidates on admin update', async () => {
@@ -81,7 +86,7 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
 
     const cake = await prisma.product.findUniqueOrThrow({
       where: { slug: 'tiered-bespoke-wedding-cake' },
-      include: { variants: true },
+      include: { variants: { where: { isActive: true } } },
     });
 
     const badOrder = await request(app)
@@ -123,6 +128,18 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
         .send({});
       expect(holdA.status).toBe(201);
       expect(holdA.body.hold.remainingSpots).toBe(0);
+
+      // Inject an expired hold and verify batched Redis pipeline in GET /slots prunes it
+      await redis.zadd(`slot:holds:${tightSlot.id}`, Date.now() - 5000, 'expired_hold');
+      const listRes = await request(app).get(
+        `/api/v1/slots?date=${dateOnly.toISOString().slice(0, 10)}`
+      );
+      expect(listRes.status).toBe(200);
+      const listedTight = (
+        listRes.body.slots as Array<{ id: string; activeHolds: number; remainingSpots: number }>
+      ).find((s) => s.id === tightSlot.id);
+      expect(listedTight?.activeHolds).toBe(1);
+      expect(listedTight?.remainingSpots).toBe(0);
 
       // Customer B tries to hold the same slot -> blocked!
       const holdB = await request(app)
@@ -167,7 +184,7 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
 
     const croissant = await prisma.product.findUniqueOrThrow({
       where: { slug: 'cultured-butter-croissant' },
-      include: { variants: true },
+      include: { variants: { where: { isActive: true } } },
     });
 
     const idemKey = `idem_order_${crypto.randomUUID()}`;
@@ -246,8 +263,16 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
     const dateOnly = new Date(
       Date.UTC(futureDate.getUTCFullYear(), futureDate.getUTCMonth(), futureDate.getUTCDate())
     );
-    const slot = await prisma.timeSlot.create({
-      data: {
+    const slot = await prisma.timeSlot.upsert({
+      where: {
+        date_startTime_endTime: {
+          date: dateOnly,
+          startTime: '13:00',
+          endTime: '14:00',
+        },
+      },
+      update: { maxOrders: 3, bookedOrders: 0, isClosed: false },
+      create: {
         date: dateOnly,
         startTime: '13:00',
         endTime: '14:00',
@@ -258,7 +283,7 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
 
     const sourdough = await prisma.product.findUniqueOrThrow({
       where: { slug: 'country-sourdough-boule' },
-      include: { variants: true },
+      include: { variants: { where: { isActive: true } } },
     });
 
     const createdOrders: Array<{ id: string; providerRef: string; amount: number }> = [];
@@ -375,5 +400,105 @@ describe('Backeri API — Integration, Concurrency, Idempotency & RBAC', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(adminAnalytics.status).toBe(200);
     expect(adminAnalytics.body.summary).toBeDefined();
+  });
+
+  it('supports Admin-only Menu & Variant CRUD with safe archiving and cache invalidation', async () => {
+    const newProductPayload = {
+      name: 'Hazelnut Praline Paris-Brest',
+      description: 'Choux pastry ring filled with roasted Piedmont hazelnut mousseline.',
+      category: 'Seasonal Tarts',
+      basePriceCents: 4400,
+      leadTimeHours: 12,
+      imageUrl: '/images/lemon-tart.svg',
+      tags: ['Seasonal', '12h Notice'],
+      variants: [
+        { label: '7-inch Ring (Serves 6)', priceDeltaCents: 0 },
+        { label: '9-inch Ring (Serves 10)', priceDeltaCents: 1400 },
+      ],
+    };
+
+    // Baker blocked from creating products
+    const bakerCreate = await request(app)
+      .post('/api/v1/admin/products')
+      .set('Authorization', `Bearer ${bakerToken}`)
+      .send(newProductPayload);
+    expect(bakerCreate.status).toBe(403);
+
+    // Warm menu cache first
+    await request(app).get('/api/v1/menu');
+
+    // Admin creates product with initial variants
+    const createdRes = await request(app)
+      .post('/api/v1/admin/products')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(newProductPayload);
+    expect(createdRes.status).toBe(201);
+    const product = createdRes.body.product;
+    expect(product.variants).toHaveLength(2);
+
+    // Verify Redis cache was invalidated
+    const menuAfterCreate = await request(app).get('/api/v1/menu');
+    expect(menuAfterCreate.body.cached).toBe(false);
+
+    // Admin updates base price & lead time
+    const updatedRes = await request(app)
+      .patch(`/api/v1/admin/products/${product.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ basePriceCents: 4600, leadTimeHours: 24 });
+    expect(updatedRes.status).toBe(200);
+    expect(updatedRes.body.product.basePriceCents).toBe(4600);
+    expect(updatedRes.body.product.leadTimeHours).toBe(24);
+
+    // Baker blocked from adding variants
+    const bakerVariant = await request(app)
+      .post(`/api/v1/admin/products/${product.id}/variants`)
+      .set('Authorization', `Bearer ${bakerToken}`)
+      .send({ label: 'Gluten-Free', priceDeltaCents: 500 });
+    expect(bakerVariant.status).toBe(403);
+
+    // Admin adds, updates, and deletes a variant
+    const addedVar = await request(app)
+      .post(`/api/v1/admin/products/${product.id}/variants`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ label: '7-inch Eggless', priceDeltaCents: 400 });
+    expect(addedVar.status).toBe(201);
+    const variantId = addedVar.body.variant.id as string;
+
+    const patchedVar = await request(app)
+      .patch(`/api/v1/admin/products/${product.id}/variants/${variantId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ label: '7-inch Eggless & Nut-Light', priceDeltaCents: 500 });
+    expect(patchedVar.status).toBe(200);
+    expect(patchedVar.body.variant.priceDeltaCents).toBe(500);
+
+    const deletedVar = await request(app)
+      .delete(`/api/v1/admin/products/${product.id}/variants/${variantId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(deletedVar.status).toBe(200);
+    expect(deletedVar.body.deleted).toBe(true);
+
+    // Admin hard-deletes unreferenced test product
+    const deletedProd = await request(app)
+      .delete(`/api/v1/admin/products/${product.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(deletedProd.status).toBe(200);
+    expect(deletedProd.body.deleted).toBe(true);
+
+    // Deleting a product with existing order history safely archives instead of deleting
+    const sourdough = await prisma.product.findUniqueOrThrow({
+      where: { slug: 'country-sourdough-boule' },
+    });
+    const archivedProd = await request(app)
+      .delete(`/api/v1/admin/products/${sourdough.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(archivedProd.status).toBe(200);
+    expect(archivedProd.body.deleted).toBe(false);
+    expect(archivedProd.body.archived).toBe(true);
+
+    // Restore sourdough to active
+    await request(app)
+      .patch(`/api/v1/admin/products/${sourdough.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ isActive: true });
   });
 });

@@ -23,7 +23,7 @@ import type { OrderDTO, TimeSlotDTO } from '@/lib/types';
 import { useAuth } from '@/components/AuthProvider';
 import { useCart } from '@/components/CartProvider';
 
-const DELIVERY_FEE_CENTS = 600;
+const DELIVERY_FEE_CENTS = 0;
 
 function getUpcomingDates(count = 10): string[] {
   const dates: string[] = [];
@@ -40,7 +40,15 @@ function getUpcomingDates(count = 10): string[] {
 export default function CheckoutPage() {
   const router = useRouter();
   const { user, login, register } = useAuth();
-  const { items, subtotalCents, maxLeadTimeHours, clearCart } = useCart();
+  const {
+    items,
+    subtotalCents,
+    maxLeadTimeHours,
+    clearCart,
+    fulfillmentMode,
+    setFulfillmentMode,
+    deliveryZone,
+  } = useCart();
 
   // Auth form state
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -54,7 +62,8 @@ export default function CheckoutPage() {
   // Fulfillment & slot state
   const upcomingDates = useMemo(() => getUpcomingDates(10), []);
   const [selectedDate, setSelectedDate] = useState(() => {
-    const defaultOffset = maxLeadTimeHours >= 24 ? 2 : 1;
+    const defaultOffset =
+      maxLeadTimeHours >= 24 ? 2 : maxLeadTimeHours > 0 ? 1 : 0;
     return upcomingDates[Math.min(defaultOffset, upcomingDates.length - 1)];
   });
   const [slots, setSlots] = useState<TimeSlotDTO[]>([]);
@@ -67,16 +76,26 @@ export default function CheckoutPage() {
   } | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
 
-  const [fulfillmentType, setFulfillmentType] = useState<'PICKUP' | 'DELIVERY'>(
-    'PICKUP'
-  );
+  const fulfillmentType = fulfillmentMode;
+  const setFulfillmentType = setFulfillmentMode;
   const [address, setAddress] = useState({
     line1: '',
     line2: '',
-    city: 'San Francisco',
-    postalCode: '',
+    city: deliveryZone.area || 'Bengaluru',
+    postalCode: deliveryZone.pincode || '560038',
     instructions: '',
   });
+
+  useEffect(() => {
+    setAddress((prev) => ({
+      ...prev,
+      postalCode: deliveryZone.pincode || prev.postalCode,
+      city:
+        deliveryZone.area && !deliveryZone.area.includes('Enter')
+          ? deliveryZone.area
+          : prev.city,
+    }));
+  }, [deliveryZone.pincode, deliveryZone.area]);
 
   // Checkout / Payment modal state
   const [checkoutError, setCheckoutError] = useState('');
@@ -367,16 +386,42 @@ export default function CheckoutPage() {
             </h2>
 
             {user ? (
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-parchment/70 px-4 py-3 text-sm">
-                <div>
-                  <p className="font-semibold text-espresso">{user.name}</p>
-                  <p className="text-xs text-cocoa">
-                    {user.email} {user.phone ? `• ${user.phone}` : ''}
-                  </p>
+              <div className="mt-3 space-y-2.5">
+                <div className="flex items-center justify-between rounded-xl bg-parchment/70 px-4 py-3 text-sm">
+                  <div>
+                    <p className="font-semibold text-espresso">{user.name}</p>
+                    <p className="text-xs text-cocoa">
+                      {user.email} {user.phone ? `• ${user.phone}` : ''}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-sage/15 px-2.5 py-1 text-xs font-semibold text-sage">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Signed in
+                  </span>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-sage/15 px-2.5 py-1 text-xs font-semibold text-sage">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Signed in
-                </span>
+
+                {user.emailVerified === false && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs text-amber-900">
+                    <span>Your email address isn&apos;t verified yet.</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await apiFetch<{
+                          verificationToken?: string;
+                        }>('/api/v1/auth/resend-verification', {
+                          method: 'POST',
+                        });
+                        if (res.verificationToken) {
+                          router.push(`/verify-email?token=${res.verificationToken}`);
+                        } else {
+                          alert('Verification email resent!');
+                        }
+                      }}
+                      className="font-bold text-terracotta underline"
+                    >
+                      Verify / Resend Link
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <form onSubmit={handleAuthSubmit} className="mt-4 space-y-3">
@@ -460,10 +505,19 @@ export default function CheckoutPage() {
                         ? 'Sign In & Continue'
                         : 'Register & Continue'}
                   </button>
-                  <span className="text-[11px] text-cocoa">
-                    Demo customer pre-filled: <code>customer@backeri.local</code> /{' '}
-                    <code>password123</code>
-                  </span>
+                  <div className="flex items-center gap-3 text-[11px] text-cocoa">
+                    {authMode === 'login' && (
+                      <Link
+                        href="/forgot-password"
+                        className="font-semibold text-terracotta hover:underline"
+                      >
+                        Forgot password?
+                      </Link>
+                    )}
+                    <span>
+                      Demo: <code>customer@backeri.local</code> / <code>password123</code>
+                    </span>
+                  </div>
                 </div>
               </form>
             )}

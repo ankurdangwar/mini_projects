@@ -30,159 +30,180 @@ const DEMO_USERS = [
 
 const SEED_PRODUCTS = [
   {
-    slug: 'country-sourdough-boule',
-    name: 'Country Sourdough Boule',
-    description:
-      '36-hour naturally leavened country loaf made with stone-milled organic wheat, blistered mahogany crust, and open custardy crumb.',
-    category: 'Artisan Breads',
-    basePriceCents: 950,
-    leadTimeHours: 2,
-    imageUrl: '/images/sourdough.svg',
-    tags: ['Vegan', 'Naturally Leavened', 'Daily Bake'],
-    variants: [
-      { label: 'Classic Country (850g)', priceDeltaCents: 0 },
-      { label: 'Roasted Garlic & Rosemary', priceDeltaCents: 150 },
-      { label: 'Toasted Sesame & Seeded', priceDeltaCents: 150 },
-    ],
-  },
-  {
-    slug: 'dark-rye-caraway-loaf',
-    name: 'Nordic Dark Rye & Caraway',
-    description:
-      'Hearty whole-grain dark rye loaf enriched with molasses, toasted caraway seeds, and orange zest.',
-    category: 'Artisan Breads',
-    basePriceCents: 1050,
-    leadTimeHours: 4,
-    imageUrl: '/images/rye.svg',
-    tags: ['Vegan', 'Whole Grain'],
-    variants: [
-      { label: 'Whole Loaf (900g)', priceDeltaCents: 0 },
-      { label: 'Pre-Sliced Loaf', priceDeltaCents: 50 },
-    ],
-  },
-  {
-    slug: 'cultured-butter-croissant',
-    name: 'Cultured Butter Croissant',
-    description:
-      'Three-day laminated French pastry rolled with 84% Normandy-style cultured butter for honeycomb layers and shatter-crisp edges.',
-    category: 'Viennoiserie',
-    basePriceCents: 525,
-    leadTimeHours: 1,
-    imageUrl: '/images/croissant.svg',
-    tags: ['Fresh Morning Batch', 'Bestseller'],
-    variants: [
-      { label: 'Single Croissant', priceDeltaCents: 0 },
-      { label: 'Box of 4', priceDeltaCents: 1475 },
-      { label: 'Box of 6', priceDeltaCents: 2375 },
-    ],
-  },
-  {
-    slug: 'cardamom-morning-bun',
-    name: 'Swedish Cardamom Knot',
-    description:
-      'Brioche dough braided with freshly ground green cardamom pods, brown butter, and pearl sugar.',
-    category: 'Viennoiserie',
-    basePriceCents: 575,
-    leadTimeHours: 1,
-    imageUrl: '/images/cardamom.svg',
-    tags: ['Signature', 'Warm Spice'],
-    variants: [
-      { label: 'Single Knot', priceDeltaCents: 0 },
-      { label: 'Box of 4', priceDeltaCents: 1625 },
-    ],
-  },
-  {
-    slug: 'pain-au-chocolat',
-    name: 'Valrhona Pain au Chocolat',
-    description:
-      'Flaky laminated pastry folded around twin batons of 70% Guanaja dark chocolate.',
-    category: 'Viennoiserie',
-    basePriceCents: 575,
-    leadTimeHours: 1,
-    imageUrl: '/images/pain-chocolat.svg',
-    tags: ['70% Dark Chocolate'],
-    variants: [
-      { label: 'Single Pastry', priceDeltaCents: 0 },
-      { label: 'Box of 4', priceDeltaCents: 1625 },
-    ],
-  },
-  {
     slug: 'belgian-dark-chocolate-ganache-cake',
-    name: 'Belgian Dark Chocolate Ganache Cake',
+    name: 'Belgian Dark Chocolate Truffle Cake',
     description:
-      'Three velvety cocoa sponge layers soaked in espresso syrup and finished in glossy 64% Belgian chocolate ganache. Ideal for custom inscriptions.',
-    category: 'Celebration Cakes',
-    basePriceCents: 5400,
-    leadTimeHours: 24,
+      'Three velvety cocoa sponge layers soaked in espresso syrup and finished in glossy 64% Belgian chocolate ganache. Same-day custom message.',
+    category: 'Cakes',
+    basePriceCents: 69900, // ₹699
+    leadTimeHours: 4,
     imageUrl: '/images/chocolate-cake.svg',
-    tags: ['24h Notice', 'Custom Inscription'],
+    tags: ['Eggless', 'Bestseller', 'Same-Day'],
     variants: [
-      { label: '6-inch (Serves 8–10)', priceDeltaCents: 0 },
-      { label: '6-inch Eggless', priceDeltaCents: 400 },
-      { label: '8-inch (Serves 14–16)', priceDeltaCents: 2200 },
-      { label: '8-inch Eggless', priceDeltaCents: 2600 },
+      { label: '500g • Eggless', priceDeltaCents: 0 },
+      { label: '500g • With Egg', priceDeltaCents: 0 },
+      { label: '1kg • Eggless', priceDeltaCents: 55000 },
+      { label: '1kg • With Egg', priceDeltaCents: 55000 },
+      { label: '2kg • Eggless', priceDeltaCents: 125000 },
+      { label: '2kg • With Egg', priceDeltaCents: 125000 },
     ],
   },
   {
     slug: 'pistachio-raspberry-celebration-cake',
     name: 'Roasted Pistachio & Raspberry Cake',
     description:
-      'Bronte pistachio sponge layered with tart raspberry compote and whipped mascarpone vanilla bean buttercream.',
-    category: 'Celebration Cakes',
-    basePriceCents: 5800,
-    leadTimeHours: 24,
+      'Iranian pistachio sponge layered with tart raspberry compote and whipped mascarpone vanilla buttercream.',
+    category: 'Cakes',
+    basePriceCents: 79900, // ₹799
+    leadTimeHours: 6,
     imageUrl: '/images/pistachio-cake.svg',
-    tags: ['24h Notice', 'Custom Inscription', 'Chef Favorite'],
+    tags: ['Eggless', 'Sugar-Free', 'Chef Special'],
     variants: [
-      { label: '6-inch (Serves 8–10)', priceDeltaCents: 0 },
-      { label: '8-inch (Serves 14–16)', priceDeltaCents: 2400 },
-      { label: '8-inch Gluten-Free', priceDeltaCents: 2900 },
+      { label: '500g • Eggless', priceDeltaCents: 0 },
+      { label: '500g • With Egg', priceDeltaCents: 0 },
+      { label: '1kg • Eggless', priceDeltaCents: 65000 },
+      { label: '1kg • With Egg', priceDeltaCents: 65000 },
+      { label: '2kg • Eggless', priceDeltaCents: 145000 },
     ],
   },
   {
     slug: 'tiered-bespoke-wedding-cake',
     name: 'Two-Tier Floral Celebration Cake',
     description:
-      'Hand-piped vintage buttercream celebration cake customized to your inspiration photo and flavor profile. Requires 48 hours kitchen notice.',
-    category: 'Celebration Cakes',
-    basePriceCents: 13500,
+      'Hand-piped vintage buttercream celebration cake customized to your inspiration photo and flavor profile. Requires 48h bakery notice.',
+    category: 'Cakes',
+    basePriceCents: 249900, // ₹2,499
     leadTimeHours: 48,
     imageUrl: '/images/tiered-cake.svg',
-    tags: ['48h Notice', 'Upload Inspiration Pic'],
+    tags: ['Eggless', '48h Notice', 'Custom Photo'],
     variants: [
-      { label: 'Vanilla Bean & Berry (Serves 25)', priceDeltaCents: 0 },
-      { label: 'Salted Caramel Espresso (Serves 25)', priceDeltaCents: 1000 },
-      { label: 'Eggless Vanilla & Berry (Serves 25)', priceDeltaCents: 1200 },
+      { label: '1kg • Eggless', priceDeltaCents: 0 },
+      { label: '2kg • Eggless', priceDeltaCents: 140000 },
+      { label: '2kg • With Egg', priceDeltaCents: 130000 },
     ],
   },
   {
     slug: 'burnt-basque-cheesecake',
     name: 'San Sebastian Burnt Basque Cheesecake',
     description:
-      'Deeply caramelized crust giving way to a molten, silky vanilla-bean cheesecake center. Naturally crustless.',
-    category: 'Seasonal Tarts',
-    basePriceCents: 4200,
-    leadTimeHours: 12,
+      'Deeply caramelized crust giving way to a molten, silky vanilla-bean cheesecake center. Naturally gluten-free & available sugar-free.',
+    category: 'Cakes',
+    basePriceCents: 84900, // ₹849
+    leadTimeHours: 4,
     imageUrl: '/images/basque-cheesecake.svg',
-    tags: ['12h Notice', 'Gluten-Free Friendly'],
+    tags: ['Eggless', 'Sugar-Free'],
     variants: [
-      { label: '6-inch Whole', priceDeltaCents: 0 },
-      { label: '8-inch Whole', priceDeltaCents: 1600 },
+      { label: '500g • Eggless', priceDeltaCents: 0 },
+      { label: '500g • With Egg', priceDeltaCents: 0 },
+      { label: '1kg • Eggless', priceDeltaCents: 65000 },
+      { label: '2kg • Eggless', priceDeltaCents: 145000 },
+    ],
+  },
+  {
+    slug: 'cultured-butter-croissant',
+    name: 'Cultured Butter Croissant',
+    description:
+      'Flaky 3-day laminated French croissant rolled with 84% cultured butter. Baked fresh every morning — ready in 30 mins.',
+    category: 'Pastries',
+    basePriceCents: 22000, // ₹220
+    leadTimeHours: 0,
+    imageUrl: '/images/croissant.svg',
+    tags: ['Eggless', 'Ready in 30 mins', 'Bestseller'],
+    variants: [
+      { label: 'Single Croissant', priceDeltaCents: 0 },
+      { label: 'Box of 4', priceDeltaCents: 58000 },
+      { label: 'Box of 6', priceDeltaCents: 93000 },
+    ],
+  },
+  {
+    slug: 'pain-au-chocolat',
+    name: 'Valrhona Pain au Chocolat',
+    description:
+      'Crisp laminated butter pastry folded around twin batons of 70% dark chocolate. Warm from the oven.',
+    category: 'Pastries',
+    basePriceCents: 26000, // ₹260
+    leadTimeHours: 0,
+    imageUrl: '/images/pain-chocolat.svg',
+    tags: ['Eggless', 'Ready in 30 mins'],
+    variants: [
+      { label: 'Single Pastry', priceDeltaCents: 0 },
+      { label: 'Box of 4', priceDeltaCents: 68000 },
     ],
   },
   {
     slug: 'meyer-lemon-meringue-tart',
-    name: 'Torched Meyer Lemon Meringue Tart',
+    name: 'Zero-Sugar Berry & Lemon Tart',
     description:
-      'Almond pâte sucrée shell filled with bright Meyer lemon curd and crowned with toasted Swiss meringue peaks.',
-    category: 'Seasonal Tarts',
-    basePriceCents: 3800,
-    leadTimeHours: 12,
+      'Crisp almond shell filled with bright citrus curd and monk-fruit sweetened cream. Diabetic-friendly treat under ₹500.',
+    category: 'Pastries',
+    basePriceCents: 39000, // ₹390
+    leadTimeHours: 0,
     imageUrl: '/images/lemon-tart.svg',
-    tags: ['12h Notice', 'Seasonal'],
+    tags: ['Eggless', 'Sugar-Free', 'Ready in 30 mins'],
     variants: [
-      { label: '7-inch Tart (Serves 6–8)', priceDeltaCents: 0 },
-      { label: '9-inch Tart (Serves 10–12)', priceDeltaCents: 1200 },
+      { label: 'Individual Tart (180g)', priceDeltaCents: 0 },
+      { label: 'Box of 2 Tarts', priceDeltaCents: 35000 },
+    ],
+  },
+  {
+    slug: 'country-sourdough-boule',
+    name: 'Country Sourdough Boule',
+    description:
+      '36-hour naturally leavened country loaf with organic stone-milled wheat, blistered crust, and custardy crumb.',
+    category: 'Breads',
+    basePriceCents: 36000, // ₹360
+    leadTimeHours: 0,
+    imageUrl: '/images/sourdough.svg',
+    tags: ['Eggless', 'Sugar-Free', 'Ready in 30 mins'],
+    variants: [
+      { label: 'Classic Country (650g)', priceDeltaCents: 0 },
+      { label: 'Roasted Garlic & Rosemary', priceDeltaCents: 6000 },
+      { label: 'Toasted Sesame & Seeded', priceDeltaCents: 6000 },
+    ],
+  },
+  {
+    slug: 'dark-rye-caraway-loaf',
+    name: 'Multigrain Dark Rye Sandwich Loaf',
+    description:
+      'High-fiber whole-grain dark rye loaf with zero added refined sugar, toasted caraway, and flax seeds.',
+    category: 'Breads',
+    basePriceCents: 39000, // ₹390
+    leadTimeHours: 0,
+    imageUrl: '/images/rye.svg',
+    tags: ['Eggless', 'Sugar-Free', 'Ready in 30 mins'],
+    variants: [
+      { label: 'Pre-Sliced Loaf (700g)', priceDeltaCents: 0 },
+      { label: 'Whole Unsliced Loaf', priceDeltaCents: 0 },
+    ],
+  },
+  {
+    slug: 'cardamom-morning-bun',
+    name: 'Smoked Cheese & Herb Pull-Apart Puff',
+    description:
+      'Golden flaky savory Danish folded with aged cheddar, caramelized onion, and fresh thyme — hot cafe snack.',
+    category: 'Savories',
+    basePriceCents: 24000, // ₹240
+    leadTimeHours: 0,
+    imageUrl: '/images/cardamom.svg',
+    tags: ['Eggless', 'Ready in 30 mins', 'Cafe Favorite'],
+    variants: [
+      { label: 'Single Puff', priceDeltaCents: 0 },
+      { label: 'Pack of 3', priceDeltaCents: 42000 },
+    ],
+  },
+  {
+    slug: 'breakfast-croissant-coffee-combo',
+    name: 'Morning Cafe Breakfast Combo',
+    description:
+      '2 Cultured Butter Croissants + 1 Valrhona Pain au Chocolat + 1 Savory Herb Puff packed warm for instant doorstep delivery.',
+    category: 'Combos',
+    basePriceCents: 49900, // ₹499
+    leadTimeHours: 0,
+    imageUrl: '/images/croissant.svg',
+    tags: ['Eggless', 'Ready in 30 mins', 'Save ₹160'],
+    variants: [
+      { label: 'Solo / Duo Box (4 pcs)', priceDeltaCents: 0 },
+      { label: 'Office Team Box (8 pcs)', priceDeltaCents: 45000 },
     ],
   },
 ];
@@ -203,13 +224,15 @@ async function seed() {
     const passwordHash = await bcrypt.hash(u.password, 10);
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { name: u.name, phone: u.phone, role: u.role },
+      update: { name: u.name, phone: u.phone, role: u.role, isActive: true, emailVerified: true },
       create: {
         email: u.email,
         name: u.name,
         phone: u.phone,
         passwordHash,
         role: u.role,
+        isActive: true,
+        emailVerified: true,
       },
     });
   }
@@ -240,6 +263,15 @@ async function seed() {
       },
     });
 
+    const desiredLabels = prod.variants.map((v) => v.label);
+    await prisma.productVariant.updateMany({
+      where: {
+        productId: upsertedProduct.id,
+        label: { notIn: desiredLabels },
+      },
+      data: { isActive: false },
+    });
+
     for (const v of prod.variants) {
       await prisma.productVariant.upsert({
         where: {
@@ -248,11 +280,12 @@ async function seed() {
             label: v.label,
           },
         },
-        update: { priceDeltaCents: v.priceDeltaCents },
+        update: { priceDeltaCents: v.priceDeltaCents, isActive: true },
         create: {
           productId: upsertedProduct.id,
           label: v.label,
           priceDeltaCents: v.priceDeltaCents,
+          isActive: true,
         },
       });
     }

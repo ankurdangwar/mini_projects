@@ -91,6 +91,15 @@ export default function AdminLoginPage() {
             <KeyRound className="h-4 w-4" />
             {busy ? 'Signing in...' : 'Open Kitchen Dashboard'}
           </button>
+
+          <div className="text-right">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold text-terracotta hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </form>
 
         <div className="mt-6 rounded-2xl border border-wheat bg-parchment/70 p-4">

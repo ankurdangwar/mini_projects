@@ -1,8 +1,8 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, WasteReason } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../middleware/errorHandler';
 
-interface PrepSheetRawRow {
+interface PrepRow {
   product_id: string;
   product_name: string;
   category: string;
@@ -12,244 +12,439 @@ interface PrepSheetRawRow {
   order_count: bigint | number;
 }
 
-interface PrepSlotBreakdownRow {
+interface PrepSlotRow {
   variant_id: string;
   start_time: string;
   end_time: string;
   quantity: bigint | number;
 }
 
-export const dashboardService = {
-  async getPrepSheet(dateStr?: string) {
-    const resolvedDate =
-      dateStr ??
-      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+interface DailyRevenueRow {
+  day: Date;
+  revenue_cents: bigint | number;
+  order_count: bigint | number;
+}
 
-    const targetDate = new Date(`${resolvedDate}T00:00:00.000Z`);
+interface TopProductRow {
+  product_id: string;
+  product_name: string;
+  category: string;
+  units_sold: bigint | number;
+  revenue_cents: bigint | number;
+}
+
+interface PeakSlotRow {
+  start_time: string;
+  end_time: string;
+  order_count: bigint | number;
+}
+
+interface WasteByReasonRow {
+  reason: WasteReason;
+  units: bigint | number;
+  value_cents: bigint | number;
+}
+
+interface TopWastedRow {
+  product_id: string;
+  product_name: string;
+  variant_label: string;
+  units: bigint | number;
+  value_cents: bigint | number;
+}
+
+export const dashboardService = {
+  async getPrepSheet(dateStr: string) {
+    const targetDate = new Date(`${dateStr}T00:00:00.000Z`);
     if (Number.isNaN(targetDate.getTime())) {
       throw new AppError(400, 'Invalid date format. Expected YYYY-MM-DD', 'INVALID_DATE');
     }
 
-    // Core grouped SQL aggregation: SUM(quantity) GROUP BY product_id, variant_id
-    const rows = await prisma.$queryRaw<PrepSheetRawRow[]>(
-      Prisma.sql`
-        SELECT
-          p.id AS product_id,
-          p.name AS product_name,
-          p.category AS category,
-          pv.id AS variant_id,
-          pv.label AS variant_label,
-          SUM(oi.quantity)::int AS total_quantity,
-          COUNT(DISTINCT o.id)::int AS order_count
-        FROM order_items oi
-        INNER JOIN orders o ON o.id = oi.order_id
-        INNER JOIN time_slots ts ON ts.id = o.slot_id
-        INNER JOIN product_variants pv ON pv.id = oi.variant_id
-        INNER JOIN products p ON p.id = pv.product_id
-        WHERE ts.date = ${targetDate}::date
-          AND o.status IN ('PAID', 'BAKING', 'READY')
-        GROUP BY p.id, p.name, p.category, pv.id, pv.label
-        ORDER BY p.category ASC, p.name ASC, pv.label ASC
-      `
-    );
-
-    // Slot-level breakdown so bakers know what must come out of the oven for 8am vs 2pm
-    const slotRows = await prisma.$queryRaw<PrepSlotBreakdownRow[]>(
-      Prisma.sql`
-        SELECT
-          oi.variant_id,
-          ts.start_time,
-          ts.end_time,
-          SUM(oi.quantity)::int AS quantity
-        FROM order_items oi
-        INNER JOIN orders o ON o.id = oi.order_id
-        INNER JOIN time_slots ts ON ts.id = o.slot_id
-        WHERE ts.date = ${targetDate}::date
-          AND o.status IN ('PAID', 'BAKING', 'READY')
-        GROUP BY oi.variant_id, ts.start_time, ts.end_time
-        ORDER BY ts.start_time ASC
-      `
-    );
-
-    // Custom notes & cake inscriptions for that day's bake
-    const customOrders = await prisma.order.findMany({
-      where: {
-        slot: { date: targetDate },
-        status: { in: ['PAID', 'BAKING', 'READY'] },
-      },
-      include: {
-        slot: true,
-        items: {
-          include: {
-            variant: { include: { product: true } },
-          },
+    const [groupedRows, slotBreakdownRows, statusCounts] = await Promise.all([
+      prisma.$queryRaw<PrepRow[]>(
+        Prisma.sql`
+          SELECT
+            p.id AS product_id,
+            p.name AS product_name,
+            p.category AS category,
+            pv.id AS variant_id,
+            pv.label AS variant_label,
+            SUM(oi.quantity) AS total_quantity,
+            COUNT(DISTINCT o.id) AS order_count
+          FROM order_items oi
+          INNER JOIN orders o ON o.id = oi.order_id
+          INNER JOIN time_slots ts ON ts.id = o.slot_id
+          INNER JOIN product_variants pv ON pv.id = oi.variant_id
+          INNER JOIN products p ON p.id = pv.product_id
+          WHERE ts.date = ${targetDate}::date
+            AND o.status IN ('PAID', 'BAKING', 'READY')
+          GROUP BY p.id, p.name, p.category, pv.id, pv.label
+          ORDER BY p.category ASC, p.name ASC, pv.label ASC
+        `
+      ),
+      prisma.$queryRaw<PrepSlotRow[]>(
+        Prisma.sql`
+          SELECT
+            oi.variant_id,
+            ts.start_time,
+            ts.end_time,
+            SUM(oi.quantity) AS quantity
+          FROM order_items oi
+          INNER JOIN orders o ON o.id = oi.order_id
+          INNER JOIN time_slots ts ON ts.id = o.slot_id
+          WHERE ts.date = ${targetDate}::date
+            AND o.status IN ('PAID', 'BAKING', 'READY')
+          GROUP BY oi.variant_id, ts.start_time, ts.end_time
+          ORDER BY ts.start_time ASC
+        `
+      ),
+      prisma.order.groupBy({
+        by: ['status'],
+        where: {
+          slot: { date: targetDate },
+          status: { in: ['PAID', 'BAKING', 'READY', 'COMPLETED'] },
         },
-      },
-      orderBy: { slot: { startTime: 'asc' } },
-    });
+        _count: { id: true },
+      }),
+    ]);
 
-    const customDecorations = customOrders.flatMap((o) =>
-      o.items
-        .filter((i) => {
-          const notes = i.customNotes as Record<string, unknown> | null;
-          return (
-            notes &&
-            (notes.inscription || notes.dietaryNotes || notes.referenceImageUrl)
-          );
-        })
-        .map((i) => ({
-          orderNumber: o.orderNumber,
-          slotWindow: `${o.slot.startTime}–${o.slot.endTime}`,
-          productName: i.variant.product.name,
-          variantLabel: i.variant.label,
-          quantity: i.quantity,
-          customNotes: i.customNotes,
-        }))
-    );
-
-    const slotMap = new Map<
+    const slotsByVariant = new Map<
       string,
       Array<{ startTime: string; endTime: string; quantity: number }>
     >();
-    for (const r of slotRows) {
-      const list = slotMap.get(r.variant_id) ?? [];
+
+    for (const row of slotBreakdownRows) {
+      const list = slotsByVariant.get(row.variant_id) ?? [];
       list.push({
-        startTime: r.start_time,
-        endTime: r.end_time,
-        quantity: Number(r.quantity),
+        startTime: row.start_time,
+        endTime: row.end_time,
+        quantity: Number(row.quantity),
       });
-      slotMap.set(r.variant_id, list);
+      slotsByVariant.set(row.variant_id, list);
     }
 
-    const items = rows.map((r) => ({
-      productId: r.product_id,
-      productName: r.product_name,
-      category: r.category,
-      variantId: r.variant_id,
-      variantLabel: r.variant_label,
-      totalQuantity: Number(r.total_quantity),
-      orderCount: Number(r.order_count),
-      bySlot: slotMap.get(r.variant_id) ?? [],
+    const items = groupedRows.map((row) => ({
+      productId: row.product_id,
+      productName: row.product_name,
+      category: row.category,
+      variantId: row.variant_id,
+      variantLabel: row.variant_label,
+      totalQuantity: Number(row.total_quantity),
+      orderCount: Number(row.order_count),
+      slotBreakdown: slotsByVariant.get(row.variant_id) ?? [],
     }));
 
-    const totalUnits = items.reduce((sum, i) => sum + i.totalQuantity, 0);
+    const totalUnits = items.reduce((acc, i) => acc + i.totalQuantity, 0);
 
     return {
-      date: resolvedDate,
-      totalOrders: customOrders.length,
+      date: dateStr,
       totalUnits,
+      distinctVariants: items.length,
+      statusSummary: statusCounts.reduce<Record<string, number>>((acc, s) => {
+        acc[s.status] = s._count.id;
+        return acc;
+      }, {}),
       items,
-      customDecorations,
     };
+  },
+
+  async createWasteLog(
+    loggedById: string,
+    input: {
+      date: string;
+      variantId: string;
+      quantity: number;
+      reason: WasteReason;
+      notes?: string;
+    }
+  ) {
+    const targetDate = new Date(`${input.date}T00:00:00.000Z`);
+    if (Number.isNaN(targetDate.getTime())) {
+      throw new AppError(400, 'Invalid date format. Expected YYYY-MM-DD', 'INVALID_DATE');
+    }
+
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: input.variantId },
+      include: { product: true },
+    });
+    if (!variant) {
+      throw new AppError(404, 'Product variant not found', 'VARIANT_NOT_FOUND');
+    }
+
+    const unitCostCents = variant.product.basePriceCents + variant.priceDeltaCents;
+
+    return prisma.wasteLog.create({
+      data: {
+        date: targetDate,
+        variantId: variant.id,
+        loggedById,
+        quantity: input.quantity,
+        unitCostCents,
+        reason: input.reason,
+        notes: input.notes?.trim() || undefined,
+      },
+      include: {
+        variant: {
+          include: {
+            product: { select: { id: true, name: true, category: true } },
+          },
+        },
+        loggedBy: { select: { id: true, name: true, role: true } },
+      },
+    });
+  },
+
+  async listWasteLogs(params: { date?: string; days?: number }) {
+    const where: Prisma.WasteLogWhereInput = {};
+
+    if (params.date) {
+      const targetDate = new Date(`${params.date}T00:00:00.000Z`);
+      if (Number.isNaN(targetDate.getTime())) {
+        throw new AppError(400, 'Invalid date format', 'INVALID_DATE');
+      }
+      where.date = targetDate;
+    } else {
+      const safeDays = Math.min(90, Math.max(1, params.days ?? 14));
+      const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+      where.date = { gte: since };
+    }
+
+    const logs = await prisma.wasteLog.findMany({
+      where,
+      include: {
+        variant: {
+          include: {
+            product: { select: { id: true, name: true, category: true } },
+          },
+        },
+        loggedBy: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take: 150,
+    });
+
+    const totalUnits = logs.reduce((acc, l) => acc + l.quantity, 0);
+    const totalValueCents = logs.reduce(
+      (acc, l) => acc + l.quantity * l.unitCostCents,
+      0
+    );
+
+    return {
+      logs: logs.map((l) => ({
+        ...l,
+        date: l.date.toISOString().slice(0, 10),
+        totalValueCents: l.quantity * l.unitCostCents,
+      })),
+      summary: {
+        entryCount: logs.length,
+        totalUnits,
+        totalValueCents,
+      },
+    };
+  },
+
+  async deleteWasteLog(id: string) {
+    await prisma.wasteLog.delete({ where: { id } });
+    return { deleted: true };
   },
 
   async getAnalytics(days = 14) {
     const safeDays = Math.min(90, Math.max(1, days));
-    const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+    const sinceDate = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
 
-    const orders = await prisma.order.findMany({
-      where: {
-        createdAt: { gte: since },
-        status: { not: 'PENDING' },
-      },
-      include: {
-        slot: true,
-        items: {
-          include: {
-            variant: { include: { product: true } },
+    const [
+      paidOrdersAgg,
+      cancelledCount,
+      totalNonPendingCount,
+      soldUnitsAgg,
+      dailyRevenue,
+      topProducts,
+      peakHours,
+      wasteByReason,
+      topWastedProducts,
+    ] = await Promise.all([
+      prisma.order.aggregate({
+        where: {
+          status: { in: ['PAID', 'BAKING', 'READY', 'COMPLETED'] },
+          createdAt: { gte: sinceDate },
+        },
+        _sum: { totalAmountCents: true },
+        _count: { id: true },
+        _avg: { totalAmountCents: true },
+      }),
+      prisma.order.count({
+        where: {
+          status: 'CANCELLED',
+          createdAt: { gte: sinceDate },
+        },
+      }),
+      prisma.order.count({
+        where: {
+          status: { not: 'PENDING' },
+          createdAt: { gte: sinceDate },
+        },
+      }),
+      prisma.orderItem.aggregate({
+        where: {
+          order: {
+            status: { in: ['PAID', 'BAKING', 'READY', 'COMPLETED'] },
+            createdAt: { gte: sinceDate },
           },
         },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+        _sum: { quantity: true },
+      }),
+      prisma.$queryRaw<DailyRevenueRow[]>(
+        Prisma.sql`
+          SELECT
+            DATE_TRUNC('day', created_at) AS day,
+            SUM(total_amount_cents) AS revenue_cents,
+            COUNT(id) AS order_count
+          FROM orders
+          WHERE status IN ('PAID', 'BAKING', 'READY', 'COMPLETED')
+            AND created_at >= ${sinceDate}
+          GROUP BY DATE_TRUNC('day', created_at)
+          ORDER BY day ASC
+        `
+      ),
+      prisma.$queryRaw<TopProductRow[]>(
+        Prisma.sql`
+          SELECT
+            p.id AS product_id,
+            p.name AS product_name,
+            p.category AS category,
+            SUM(oi.quantity) AS units_sold,
+            SUM(oi.quantity * oi.unit_price_cents) AS revenue_cents
+          FROM order_items oi
+          INNER JOIN orders o ON o.id = oi.order_id
+          INNER JOIN product_variants pv ON pv.id = oi.variant_id
+          INNER JOIN products p ON p.id = pv.product_id
+          WHERE o.status IN ('PAID', 'BAKING', 'READY', 'COMPLETED')
+            AND o.created_at >= ${sinceDate}
+          GROUP BY p.id, p.name, p.category
+          ORDER BY units_sold DESC, revenue_cents DESC
+          LIMIT 8
+        `
+      ),
+      prisma.$queryRaw<PeakSlotRow[]>(
+        Prisma.sql`
+          SELECT
+            ts.start_time,
+            ts.end_time,
+            COUNT(o.id) AS order_count
+          FROM orders o
+          INNER JOIN time_slots ts ON ts.id = o.slot_id
+          WHERE o.status IN ('PAID', 'BAKING', 'READY', 'COMPLETED')
+            AND o.created_at >= ${sinceDate}
+          GROUP BY ts.start_time, ts.end_time
+          ORDER BY ts.start_time ASC
+        `
+      ),
+      prisma.$queryRaw<WasteByReasonRow[]>(
+        Prisma.sql`
+          SELECT
+            reason,
+            SUM(quantity) AS units,
+            SUM(quantity * unit_cost_cents) AS value_cents
+          FROM waste_logs
+          WHERE date >= ${sinceDate}::date
+          GROUP BY reason
+          ORDER BY units DESC
+        `
+      ),
+      prisma.$queryRaw<TopWastedRow[]>(
+        Prisma.sql`
+          SELECT
+            p.id AS product_id,
+            p.name AS product_name,
+            pv.label AS variant_label,
+            SUM(w.quantity) AS units,
+            SUM(w.quantity * w.unit_cost_cents) AS value_cents
+          FROM waste_logs w
+          INNER JOIN product_variants pv ON pv.id = w.variant_id
+          INNER JOIN products p ON p.id = pv.product_id
+          WHERE w.date >= ${sinceDate}::date
+          GROUP BY p.id, p.name, pv.label
+          ORDER BY units DESC, value_cents DESC
+          LIMIT 6
+        `
+      ),
+    ]);
 
-    const activeOrders = orders.filter((o) => o.status !== 'CANCELLED');
-    const cancelledOrders = orders.filter((o) => o.status === 'CANCELLED');
-
-    const totalRevenueCents = activeOrders.reduce(
-      (sum, o) => sum + o.totalAmountCents,
-      0
-    );
-    const cancelledValueCents = cancelledOrders.reduce(
-      (sum, o) => sum + o.totalAmountCents,
-      0
-    );
-    const totalOrderCount = activeOrders.length;
-    const averageOrderValueCents =
-      totalOrderCount > 0 ? Math.round(totalRevenueCents / totalOrderCount) : 0;
-    const cancellationRatePercent =
-      orders.length > 0
-        ? Number(((cancelledOrders.length / orders.length) * 100).toFixed(1))
+    const totalRevenueCents = paidOrdersAgg._sum.totalAmountCents ?? 0;
+    const paidOrderCount = paidOrdersAgg._count.id;
+    const averageOrderValueCents = Math.round(paidOrdersAgg._avg.totalAmountCents ?? 0);
+    const cancellationRatePct =
+      totalNonPendingCount > 0
+        ? Number(((cancelledCount / totalNonPendingCount) * 100).toFixed(1))
         : 0;
 
-    // Daily revenue series (by pickup slot date)
-    const dailyMap = new Map<string, { date: string; revenueCents: number; orders: number }>();
-    for (const o of activeOrders) {
-      const key = o.slot.date.toISOString().slice(0, 10);
-      const entry = dailyMap.get(key) ?? { date: key, revenueCents: 0, orders: 0 };
-      entry.revenueCents += o.totalAmountCents;
-      entry.orders += 1;
-      dailyMap.set(key, entry);
-    }
-
-    // Top selling products
-    const productMap = new Map<
-      string,
-      { productId: string; name: string; category: string; unitsSold: number; revenueCents: number }
-    >();
-    for (const o of activeOrders) {
-      for (const item of o.items) {
-        const p = item.variant.product;
-        const entry = productMap.get(p.id) ?? {
-          productId: p.id,
-          name: p.name,
-          category: p.category,
-          unitsSold: 0,
-          revenueCents: 0,
-        };
-        entry.unitsSold += item.quantity;
-        entry.revenueCents += item.unitPriceCents * item.quantity;
-        productMap.set(p.id, entry);
-      }
-    }
-
-    // Peak pickup hours
-    const hourMap = new Map<string, { window: string; orders: number }>();
-    for (const o of activeOrders) {
-      const window = `${o.slot.startTime}–${o.slot.endTime}`;
-      const entry = hourMap.get(window) ?? { window, orders: 0 };
-      entry.orders += 1;
-      hourMap.set(window, entry);
-    }
+    const totalSoldUnits = soldUnitsAgg._sum.quantity ?? 0;
+    const totalWastedUnits = wasteByReason.reduce((s, r) => s + Number(r.units), 0);
+    const estimatedWasteValueCents = wasteByReason.reduce(
+      (s, r) => s + Number(r.value_cents),
+      0
+    );
+    const productionDenominator = totalSoldUnits + totalWastedUnits;
+    const productionWasteRatePct =
+      productionDenominator > 0
+        ? Number(((totalWastedUnits / productionDenominator) * 100).toFixed(1))
+        : 0;
 
     return {
-      rangeDays: safeDays,
+      periodDays: safeDays,
       summary: {
         totalRevenueCents,
-        totalOrders: totalOrderCount,
+        paidOrderCount,
         averageOrderValueCents,
-        cancelledOrders: cancelledOrders.length,
-        cancelledValueCents,
-        cancellationRatePercent,
+        cancelledOrderCount: cancelledCount,
+        cancellationRatePct,
       },
-      revenueByDate: Array.from(dailyMap.values()).sort((a, b) =>
-        a.date.localeCompare(b.date)
-      ),
-      topProducts: Array.from(productMap.values())
-        .sort((a, b) => b.revenueCents - a.revenueCents)
-        .slice(0, 8),
-      peakPickupHours: Array.from(hourMap.values()).sort((a, b) =>
-        a.window.localeCompare(b.window)
-      ),
+      wasteSummary: {
+        totalSoldUnits,
+        totalWastedUnits,
+        estimatedWasteValueCents,
+        productionWasteRatePct,
+        byReason: wasteByReason.map((r) => ({
+          reason: r.reason,
+          units: Number(r.units),
+          valueCents: Number(r.value_cents),
+        })),
+        topWastedProducts: topWastedProducts.map((w) => ({
+          productId: w.product_id,
+          productName: w.product_name,
+          variantLabel: w.variant_label,
+          units: Number(w.units),
+          valueCents: Number(w.value_cents),
+        })),
+      },
+      dailyRevenue: dailyRevenue.map((r) => ({
+        date: r.day.toISOString().slice(0, 10),
+        revenueCents: Number(r.revenue_cents),
+        orderCount: Number(r.order_count),
+      })),
+      topProducts: topProducts.map((p) => ({
+        productId: p.product_id,
+        productName: p.product_name,
+        category: p.category,
+        unitsSold: Number(p.units_sold),
+        revenueCents: Number(p.revenue_cents),
+      })),
+      peakWindows: peakHours.map((h) => ({
+        startTime: h.start_time,
+        endTime: h.end_time,
+        orderCount: Number(h.order_count),
+      })),
     };
   },
 
-  async getNotificationLogs(limit = 50) {
+  async getRecentNotifications(limit = 40) {
     return prisma.notificationLog.findMany({
       orderBy: { createdAt: 'desc' },
-      take: Math.min(200, Math.max(1, limit)),
+      take: Math.min(100, Math.max(1, limit)),
       include: {
-        order: { select: { orderNumber: true, status: true } },
+        order: {
+          select: { orderNumber: true, status: true },
+        },
       },
     });
   },

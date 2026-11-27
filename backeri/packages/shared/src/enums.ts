@@ -24,3 +24,12 @@ export type PaymentStatus = (typeof PaymentStatuses)[number];
 
 export const NotificationChannels = ['EMAIL', 'SMS'] as const;
 export type NotificationChannel = (typeof NotificationChannels)[number];
+
+export const WasteReasons = [
+  'UNSOLD',
+  'DAMAGED',
+  'BURNT',
+  'EXPIRED',
+  'OTHER',
+] as const;
+export type WasteReason = (typeof WasteReasons)[number];

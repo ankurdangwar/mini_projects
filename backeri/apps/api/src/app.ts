@@ -15,6 +15,7 @@ import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { realtimeRoutes } from './modules/realtime/realtime.routes';
 import { uploadRoutes } from './modules/uploads/upload.routes';
 import { uploadService } from './modules/uploads/upload.service';
+import { jobRoutes } from './modules/jobs/job.routes';
 
 export function createApp() {
   const app = express();
@@ -82,6 +83,7 @@ export function createApp() {
   app.use('/api/v1', dashboardRoutes);
   app.use('/api/v1', realtimeRoutes);
   app.use('/api/v1', uploadRoutes);
+  app.use('/api/v1', jobRoutes);
 
   app.use(errorHandler);
 

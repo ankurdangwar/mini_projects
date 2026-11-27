@@ -70,6 +70,39 @@ export const slotService = {
     }
   },
 
+  /**
+   * Batches ZREMRANGEBYSCORE + ZCARD for all requested slots into a single
+   * Redis pipeline roundtrip instead of N separate eval calls.
+   */
+  async countActiveHoldsBatch(slotIds: string[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    if (slotIds.length === 0) return counts;
+
+    const nowMs = Date.now();
+    try {
+      const pipeline = redis.pipeline();
+      for (const slotId of slotIds) {
+        const key = holdKey(slotId);
+        pipeline.zremrangebyscore(key, '-inf', nowMs);
+        pipeline.zcard(key);
+      }
+
+      const results = await pipeline.exec();
+      if (!results) return counts;
+
+      for (let i = 0; i < slotIds.length; i++) {
+        const zcardEntry = results[i * 2 + 1];
+        const count =
+          zcardEntry && !zcardEntry[0] ? Number(zcardEntry[1]) || 0 : 0;
+        counts.set(slotIds[i], count);
+      }
+    } catch {
+      // Non-fatal fallback: leave counts empty (treated as 0)
+    }
+
+    return counts;
+  },
+
   async releaseHold(slotId: string, holdId: string): Promise<void> {
     try {
       await redis.zrem(holdKey(slotId), holdId);
@@ -108,39 +141,43 @@ export const slotService = {
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
     });
 
-    const enriched = await Promise.all(
-      slots.map(async (slot) => {
-        const activeHolds = await this.countActiveHolds(slot.id);
-        const slotStart = getSlotStartDateTime(slot.date, slot.startTime);
-        const meetsLeadTime = slotStart.getTime() >= minEligibleMs;
-        const remainingSpots = Math.max(
-          0,
-          slot.maxOrders - slot.bookedOrders - activeHolds
-        );
-        const isAvailable =
-          !slot.isClosed && meetsLeadTime && remainingSpots > 0;
+    // Pre-filter before pipelining Redis when only eligible open slots are needed
+    const candidateSlots = params.includeUnavailable
+      ? slots
+      : slots.filter((slot) => {
+          const slotStart = getSlotStartDateTime(slot.date, slot.startTime);
+          return !slot.isClosed && slotStart.getTime() >= minEligibleMs;
+        });
 
-        return {
-          id: slot.id,
-          date: slot.date.toISOString().slice(0, 10),
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          maxOrders: slot.maxOrders,
-          bookedOrders: slot.bookedOrders,
-          activeHolds,
-          remainingSpots,
-          isClosed: slot.isClosed,
-          meetsLeadTime,
-          isAvailable,
-        };
-      })
+    const holdCounts = await this.countActiveHoldsBatch(
+      candidateSlots.map((s) => s.id)
     );
 
-    if (params.includeUnavailable) {
-      return enriched;
-    }
+    return candidateSlots.map((slot) => {
+      const activeHolds = holdCounts.get(slot.id) ?? 0;
+      const slotStart = getSlotStartDateTime(slot.date, slot.startTime);
+      const meetsLeadTime = slotStart.getTime() >= minEligibleMs;
+      const remainingSpots = Math.max(
+        0,
+        slot.maxOrders - slot.bookedOrders - activeHolds
+      );
+      const isAvailable =
+        !slot.isClosed && meetsLeadTime && remainingSpots > 0;
 
-    return enriched.filter((s) => s.meetsLeadTime && !s.isClosed);
+      return {
+        id: slot.id,
+        date: slot.date.toISOString().slice(0, 10),
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        maxOrders: slot.maxOrders,
+        bookedOrders: slot.bookedOrders,
+        activeHolds,
+        remainingSpots,
+        isClosed: slot.isClosed,
+        meetsLeadTime,
+        isAvailable,
+      };
+    });
   },
 
   async createSoftHold(slotId: string, existingHoldId?: string) {

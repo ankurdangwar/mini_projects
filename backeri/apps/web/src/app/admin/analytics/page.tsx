@@ -144,17 +144,84 @@ export default function AdminAnalyticsPage() {
 
             <div className="rounded-2xl border border-wheat bg-white p-5">
               <div className="flex items-center justify-between text-xs font-semibold text-cocoa">
-                <span>Cancellation / Waste Rate</span>
+                <span>Production Waste Rate</span>
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
               </div>
               <p className="mt-2 font-serif text-3xl font-bold text-espresso">
-                {analytics.summary.cancellationRatePct}%
+                {analytics.wasteSummary.productionWasteRatePct}%
               </p>
               <p className="text-[11px] text-cocoa">
-                {analytics.summary.cancelledOrderCount} cancelled orders
+                {analytics.wasteSummary.totalWastedUnits} wasted units (
+                {formatMoney(analytics.wasteSummary.estimatedWasteValueCents)}) •{' '}
+                {analytics.summary.cancellationRatePct}% order cancellations
               </p>
             </div>
           </div>
+
+          {/* Production vs Waste Breakdown */}
+          <section className="rounded-2xl border border-wheat bg-white p-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="font-serif text-lg font-bold text-espresso">
+                  Production vs. End-of-Day Bakery Waste
+                </h2>
+                <p className="text-xs text-cocoa">
+                  Sold: <strong>{analytics.wasteSummary.totalSoldUnits}</strong> units vs.
+                  Logged Waste: <strong>{analytics.wasteSummary.totalWastedUnits}</strong>{' '}
+                  units ({formatMoney(analytics.wasteSummary.estimatedWasteValueCents)}{' '}
+                  estimated value)
+                </p>
+              </div>
+            </div>
+
+            {analytics.wasteSummary.totalWastedUnits === 0 ? (
+              <p className="mt-4 text-xs text-cocoa">
+                No end-of-day waste logged in this window. Staff can record unsold or
+                damaged batches on the <strong>Waste Log</strong> page.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-6 md:grid-cols-2">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-cocoa">
+                    Waste by Reason
+                  </p>
+                  <div className="mt-2.5 space-y-2.5">
+                    {analytics.wasteSummary.byReason.map((r) => (
+                      <div key={r.reason} className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-espresso">{r.reason}</span>
+                        <span className="text-cocoa">
+                          {r.units} units • {formatMoney(r.valueCents)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-cocoa">
+                    Most Frequently Wasted Items
+                  </p>
+                  <div className="mt-2.5 space-y-2.5">
+                    {analytics.wasteSummary.topWastedProducts.map((w) => (
+                      <div
+                        key={`${w.productId}-${w.variantLabel}`}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <span className="font-semibold text-espresso">
+                          {w.productName}{' '}
+                          <span className="font-normal text-cocoa">
+                            ({w.variantLabel})
+                          </span>
+                        </span>
+                        <span className="text-terracotta font-bold">
+                          {w.units} units ({formatMoney(w.valueCents)})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Top Selling Products */}
